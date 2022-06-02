@@ -1,0 +1,822 @@
+---
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+fig_width: 1
+fig_height: 1
+header-includes:
+- \usepackage[margin=1in]{geometry}
+- \usepackage{amsmath}
+- \usepackage{tcolorbox}
+- \usepackage{amssymb}
+- \usepackage{amsthm}
+- \usepackage{multicol}
+- \usepackage[utf8]{inputenc}
+- \usepackage{parskip}
+- \usepackage{systeme}
+- \usepackage{amssymb}
+- \usepackage{amsmath}
+- \usepackage{pgfplots}
+- \usepackage{physics}
+- \usepackage{gensymb}
+- \usepackage{graphicx}
+- \usepackage{ tipa }
+- \usepackage{lastpage}
+- \usepackage{fancyhdr}
+- \usepackage{accents}
+- \pagestyle{fancy}
+- \setlength{\headheight}{40pt}
+---
+
+
+\rhead{MA331 Fall '21 \\ Final Project} 
+\cfoot{\thepage\ of \pageref{LastPage}}
+
+\begin{center}
+ {\huge Report on Relationship between Bone Formation and Resorption}
+
+\end{center}
+
+
+I pledge my honor that I have abided by the Stevens Honor System.
+
+```{r, echo=FALSE}
+
+options(warn=-1)
+suppressMessages(library("readxl"))
+suppressMessages(library("PMCMRplus"))
+suppressMessages(library(mosaic))
+suppressMessages(library(tidyverse))
+library("plot3D")
+```
+
+```{r, echo=FALSE}
+#Functions used below
+
+#summary w/ std and IQR
+summary_std_IQR <- function(df){
+  sum = summary(df)
+  sum["std"] = sd(df)
+  sum["IQR"] = IQR(df)
+  
+  sum = round(sum, 3)
+  
+  return(sum)
+}
+
+coefs_lm <- function(model) {
+  return(summary(model)$coefficients)
+}
+
+r_sq <- function(model, name) {
+  A = summary(model)$r.squared
+  B = summary(model)$adj.r.squared
+  C = summary(model)$sigma
+  groups = cbind(A, B, C)
+  colnames(groups) = c('R-squared', 'Adjusted R-squared', "Estimate std")
+  rownames(groups) = c("")
+  
+  groups = round(groups, 4)
+  
+  return(groups)
+}
+
+plot_df <- function(df, name){
+  hist(df, main=paste("histogram of", name))
+  plot(density(df), main=paste("density of", name))
+}
+
+short_summary <- function(model){
+  sum_model = summary(model)
+  
+  A = sum_model$call
+  C = sum_model$fstatistic[1]
+  
+  print("Short Regression Summary:")
+  print(A)
+  
+  print(coefs_lm(model))
+  
+  print(paste("F-statistic:", C))
+  
+}
+
+#pair graph based on
+# http://www.sthda.com/english/wiki/scatter-plot-matrices-r-base-graphs
+panel.cor <- function(x, y){
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- round(cor(x, y), digits=3)
+    txt <- paste0("R = ", r)
+    cex.cor <- 0.9/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+# Customize upper panel
+upper.panel<-function(x, y){
+  points(x,y, pch = 19)
+}
+  
+```
+
+# Section 1: Report
+
+## Executive Summary
+
+This reports summarizes our findings on producing a model which can best predict bone resorption and formation. The result of this model shows that the best single indicator for bone resorption and formation is the two variables $VO-$ against $VO+$ that measure the two respectively. While the best multiple regression indicator was the prediction for $VO+$ against $OC, trap, VO-$. Thus, $VO-$ against $VO+$ are strong single predictors, while $VO+$ and $OC, trap, VO-$ are strong multiple regression predictors for measuring the bone renewal process in healthy woman between the ages of 11 to 32 years.
+
+## Data Set
+
+The dataset contains four primary variables related to bone renewal, this includes two measurements previously mentioned $VO-$ and $VO+$, and two biomarkers Osteocalcin ($OC$) and tartrate-resistant acid phosphatase ($trap$). The sample size of $n=31$ comes from measurements in a study of 31 healthy woman aged 11 to 32 years. We make two versions of the study, where one is with the original dataset, and another where the data is log transformed. This leads to a normalization of data from the significant right skew seen in the data due to large max values.
+
+## Software
+
+Our analysis was performed entirely in R (4.1.0), via RMarkdown, in conjunction with LaTeX to produce the research paper.
+
+## Methodology
+
+The approach used for this study was linear regression analysis, where for the first portion we predicted $VO+$ against the biomarkers $OC$, then both $OC, trap$ to see if there was a relationship between measurements and biomarkers. Then we used $VO+$ against all three variables $OC, trap, VO-$ to see which out of the three varaibles would likely be a strong predictior of measurements. This analysis was repeated again for log transformed data, and the two parts were repeated with the $VO-$ measurement instead. The goal of the analysis was to find strong linear relationships between bone resorption and formation.
+
+\newpage
+
+## Results
+
+```{r, echo=FALSE}
+biomark <- read_excel("Biomark.xls")
+cols <- c(1:3, 5)
+biomark <- biomark[, cols]
+logbiomark <- read_excel("Biomark.xls")
+cols <- c(4, 6:8)
+logbiomark <- logbiomark[, cols]
+```
+
+### For Single Linear Regression:
+
+$VO-$ vs $VO+$
+
+```{r, echo=FALSE, out.width="50%"}
+reg1 = lm(vominus ~ voplus, data=biomark)
+with(biomark, plot(voplus, vominus))
+abline(reg1, col="red")
+
+confint(reg1)
+
+r_sq(reg1)
+
+beta = round(coef(reg1), 3)
+
+```
+$vominus = `r beta[1]` + `r beta[2]`(voplus)$
+
+Above is the final result for the best single linear regression in our study, with the 95\% confidence intervals for the regression line. The data shows that there is a strong linear relationship ($R^2 = .8024$) between $VO+$ and $VO-$, and that further data may lead to similar and more vigorous results.
+
+### For Multiple Linear Regression:
+
+$VO+$ vs $OC, trap, VO-$
+
+(Data is 4-dimensional)
+
+```{r, echo=FALSE, out.width="50%"}
+reg2 = lm(voplus ~ oc + trap + vominus, data=biomark)
+
+confint(reg2)
+
+r_sq(reg2)
+
+beta = round(coef(reg2), 3)
+
+```
+$voplus = `r beta[1]` + `r beta[2]` (oc) + `r beta[3]` (trap) + `r beta[4]` (vominus)$
+
+Above is the final result for the best multiple regression in our study, with the 95\% confidence intervals for the regression line. The data shows a more convincing result, ($R^2 = .8844$), further proves that with more data this model can be a strong predictor for bone formation ($VO+$).
+
+### Other Results:
+
+
+As seen in Section 2 (details of study), other than the above results, $R^2$ tend to lie between $.4 < R^2 < .6$ range, noteably models with less variables, and log transformed data result in vastly lower $R^2$. The worst regression model being log transformed $VO-$ vs $OC$ with a $R^2 = 0.3076$
+
+## Conclusion
+
+Although there is a very limited amount of data, the results indicate strong linear relationships between a large portion of the regression analysis done, notability the two identified in the Results section. To reduce variability, further studies should be done to collect more data. 
+
+Since the study that led to the data tells us that healthy bones specifically go through bone renewal, we can overlook the health status of a subject when it comes to variability in data. But to expand this model towards a larger audience, data should be sampled from a larger age range ($\pm$ 5 years), and samples should be taken from men as well. This should lead to a model which has more sturdiness, and usability when it comes to studying bone renewal.
+
+
+
+
+# Section 2: Details of Study
+
+
+
+## 11.36 Bone formation and resorption
+
+### a)
+
+
+```{r, echo=FALSE}
+A = summary_std_IQR(biomark$voplus)
+B = summary_std_IQR(biomark$vominus)
+C = summary_std_IQR(biomark$oc)
+D = summary_std_IQR(biomark$trap)
+
+groups = rbind(A,B,C,D)
+rownames(groups) = c("voplus", "vominus", "oc", "trap")
+
+knitr::kable(groups)
+```
+
+
+```{r, echo=FALSE, out.width="50%",results='hold',fig.show='hold'}
+par(mfrow=c(1,2))
+plot_df(biomark$voplus,"voplus")
+
+plot_df(biomark$vominus,"vominus")
+
+plot_df(biomark$oc,"oc")
+
+plot_df(biomark$trap,"trap")
+```
+
+All four variables $VO+, VO-, OC$ and $trap$ have a similar right skew in the histogram. Their density graphs shows the distributions of data are similar as well.
+
+Although it appears in all four plots, they have an outlier based on their respective maxes, as seen in the summary.
+
+### b)
+
+```{r, echo=FALSE, out.width="66%",results='hold',fig.show='hold'}
+
+pairs(biomark,
+      lower.panel = panel.cor,
+      upper.panel = upper.panel)
+```
+
+The pairs show that there is a strong positive correlation between $VO+$ and $VO-$, (r = $.896$), and a high positive correlation between $VO+, OC$ and $trap$, (r = $.765, .73$)
+
+There are moderately positive correlations between $VO+$ and $OC$, and in $VO+$ and $trap$ ($0.65 <$  r $< .7$)
+
+
+## 11.37 Predicting bone formation
+
+Let's use regression methods to predict VO+, the measure of bone formation.
+
+
+### a) Simple Linear Regression: VO+ vs OC
+
+\tiny
+```{r, echo=FALSE, out.width="50%"}
+relation <- lm(voplus ~ oc, data=biomark)
+short_summary(relation)
+reg <- lm(resid(relation) ~ biomark$oc)
+plot(biomark$oc, resid(relation), main="Residual plot of VO+ vs OC")
+abline(reg)
+
+relA = relation
+```
+\normalsize
+### b)
+
+\tiny
+```{r, echo=FALSE}
+relation <- lm(voplus ~ oc+trap, data=biomark)
+
+
+short_summary(relation)
+
+relB = relation
+```
+\normalsize
+
+Fitted regression: $voplus = 57.704 + 6.415(oc) + 53.874(trap)$
+
+$OC$ Hypothesis Test:
+
+$H_0: \beta_1 = 0$ (no significant diff. from zero)
+
+$H_a: \beta_1 \neq 0$ (significant diff. from zero)
+
+As we can see the P-value for OC is larger than significance level 0.05. Thus, we FAIL TO REJECT the null hypothesis. Meaning, that there is no significant difference. 
+
+$trap$ Hypothesis Test:
+
+$H_0: \beta_2 = 0$ (no significant diff. from zero)
+
+$H_a: \beta_2 \neq 0$ (significant diff. from zero)
+
+As we can see the P-value for TRAP is much less than significance level 0.05. Thus, we REJECT the null hypothesis. Meaning, that there is a significant difference. 
+
+The above results tell us that TRAP is measured with more precision than OC.
+This is consistent with the correlation found in exercise 11.36.
+
+## 11.38 More on predicting bone formation.
+Now consider a regression model for predicting VO+ using OC, TRAP, and VO-.
+
+### a)
+
+$voplus = \beta_0 + \beta_1 x_i + \beta_2 y_i + \beta_3 z_i + \epsilon_i, \, i= 1, \cdots n$
+
+$\epsilon_i \sim \mathcal{N}(0, \sigma^2)$
+
+s.t $(x,y,z) = (oc, trap, vominus)$
+
+
+### b)
+
+\tiny
+```{r, echo=FALSE}
+
+df = biomark
+
+lm_final = lm(voplus ~ oc + trap + vominus, data=df)
+
+summary(lm_final)
+
+beta = round(coef(lm_final), 3)
+
+```
+\normalsize
+
+$voplus = `r beta[1]` + `r beta[2]` (oc) + `r beta[3]` (trap) + `r beta[4]` (vominus)$
+
+
+
+### c)
+
+coefficients and the P-values differ for the three analyses.
+
+\tiny
+```{r, echo=FALSE}
+#for the person checking, this table has to be run
+#for the previous tests, then compare how the p-values
+# and coefficents differ.
+
+coefs_lm(lm_final)
+coefs_lm(relA)
+coefs_lm(relB)
+```
+\normalsize
+
+$OC$ and $trap$ both have higher p-values in the multiple regression model, compared to the previous models. There is much higher p-value when testing $VO+$ and $OC$ on its own.
+
+The coefficients are much more normalized in the multiple regression model.
+
+
+
+
+### d)
+
+\tiny
+```{r, echo=FALSE}
+#same situation with part c
+r_sq(lm_final, "voplus")
+r_sq(relA)
+r_sq(relB)
+```
+\normalsize
+
+The higher $R^2$ in the multiple regression model indicates it is much better of a model compared to the other two.
+
+
+
+### e)
+
+The results from part b, show that there is a very low p-value for vominus, thus there is strong evidence that a model between voplus and vominus will result in an effective model.
+
+\tiny
+```{r, echo=FALSE}
+lm_final_new = lm(voplus ~ vominus, data=df)
+summary(lm_final_new)
+coefs_lm(lm_final_new)
+r_sq(lm_final_new, "voplus")
+```
+\normalsize
+
+In comparison with the multiple regression model, a model based on voplus and vominus has a much lower p-value for vominus, although the p-value for intercept is a power of ten higher. Further proving there is a strong relation between voplus and vominus.
+
+
+## 11.39 Predicting bone formation using transformed variables.
+
+Repeat above parts, but transform data via $log(Biomark)$
+
+### 1a)
+
+```{r, echo=FALSE}
+A = summary_std_IQR(logbiomark$lvoplus)
+B = summary_std_IQR(logbiomark$lvominus)
+C = summary_std_IQR(logbiomark$loc)
+D = summary_std_IQR(logbiomark$ltrap)
+
+groups = rbind(A,B,C,D)
+rownames(groups) = c("lvoplus", "lvominus", "loc", "ltrap")
+
+knitr::kable(groups)
+```
+
+```{r, echo=FALSE, out.width="50%",results='hold',fig.show='hold'}
+par(mfrow=c(1,2))
+plot_df(logbiomark$lvoplus,"lvoplus")
+
+plot_df(logbiomark$lvominus,"lvominus")
+
+plot_df(logbiomark$loc,"loc")
+
+plot_df(logbiomark$ltrap,"ltrap")
+```
+
+$VO+$ is relatively normal, $VO-$ is slightly right skewed, and both $OC$ and $trap$ have a left skew, where trap is more skewed. After applying logs to the biomarkers, the data appears to be much more normally distributed compared to the original data.
+
+### 1b)
+
+```{r, echo=FALSE, out.width="66%",results='hold',fig.show='hold'}
+
+pairs(logbiomark,
+      lower.panel = panel.cor,
+      upper.panel = upper.panel)
+```
+
+The pairs show that there is a strong positive correlation between $VO+$ and $VO-$, (r = $.84$), and a high positive correlation between $VO+, trap$ and $OC$ (r = $.774, .795$) and $VO+$ and trap (r = $.775$)
+
+There are moderately positive correlations between $VO-+$ and $trap$ ($0.65 <$  r $< .7$)
+
+### 2a)
+
+\tiny
+```{r, echo=FALSE, out.width="50%"}
+relation <- lm(logbiomark$lvoplus ~ logbiomark$loc)
+short_summary(relation)
+reg <- lm(resid(relation) ~ logbiomark$loc)
+plot(logbiomark$loc, resid(relation), main="Residual plot of lVO+ vs lOC")
+abline(reg, col="red")
+relA = relation
+```
+\normalsize
+
+### 2b)
+
+\tiny
+```{r, echo=FALSE}
+relation <- lm(lvoplus ~ loc+ltrap, data=logbiomark)
+short_summary(relation)
+relB = relation
+```
+\normalsize
+
+Fitted regression: $lvoplus = 4.2592 + 0.4301(loc) + 0.4243(ltrap)$
+
+$LOC$ Hypothesis Test:
+
+$H_0: \beta_1 = 0$ (no significant diff. from zero)
+
+$H_a: \beta_1 \neq 0$ (significant diff. from zero)
+
+As we can see the P-value for LOC is less than significance level 0.05. Thus, we REJECT the null hypothesis. Meaning, that there is a significant difference. 
+
+$ltrap$ Hypothesis Test:
+
+$H_0: \beta_2 = 0$ (no significant diff. from zero)
+
+$H_a: \beta_2 \neq 0$ (significant diff. from zero)
+
+As we can see the P-value for LTRAP is less than significance level 0.05. Thus, we REJECT the null hypothesis. Meaning, that there is a significant difference. 
+
+The above results tell us that both LOC and LTRAP have a significant difference. LOC is measured with more precision than LTRAP.
+
+This is not consistent with the correlation found in exercise 11.36.
+
+### 3a)
+
+Given logarithm applied to dataset:
+
+$lvoplus = \beta_0 + \beta_1 x_i + \beta_2 y_i + \beta_3 z_i + \epsilon_i, \, i= 1, \cdots n$
+
+$\epsilon_i \sim \mathcal{N}(0, \sigma^2)$
+
+s.t $(x,y,z) = (loc, ltrap, lvominus)$
+
+
+### 3b)
+
+\tiny
+```{r, echo=FALSE}
+
+lm_final_log = lm(lvoplus ~ loc + ltrap + lvominus, data=logbiomark)
+
+summary(lm_final_log)
+
+beta = round(coef(lm_final_log), 3)
+
+```
+\normalsize
+
+$lvoplus = `r beta[1]` + `r beta[2]` (loc) + `r beta[3]` (ltrap) + `r beta[4]` (lvominus)$
+
+### 3c)
+
+\tiny
+```{r, echo=FALSE}
+#for the person checking, this table has to be run
+#for the previous tests, then compare how the p-values
+# and coefficents differ.
+
+coefs_lm(lm_final_log)
+coefs_lm(relA)
+coefs_lm(relB)
+```
+\normalsize
+
+When applying log transformation, the first model has a much lower p-value, compared to the multiple regression and second model. This may indicate it is a possible choice for a valid model.
+
+The coefficients in the multiple regression model are more bounded between 0-1.
+
+### 3d)
+
+\tiny
+```{r, echo=FALSE}
+#same situation with part c
+r_sq(lm_final_log, "voplus")
+r_sq(relA)
+r_sq(relB)
+```
+\normalsize
+
+The $R^2$ shows us that the multiple regression model, seems to be the better fit.
+
+### 3e)
+
+The results from part b, shows when applying logarithm to the data, that there still is a very low p-value for vominus, thus there is strong evidence that a model between voplus and vominus will result in an effective model.
+
+\tiny
+```{r, echo=FALSE}
+lm_final_new_log = lm(lvoplus ~ lvominus, data=logbiomark)
+summary(lm_final_new_log)
+coefs_lm(lm_final_new_log)
+r_sq(lm_final_new_log, "voplus")
+```
+\normalsize
+
+In comparison with the multiple regression model, a model based on voplus and vominus has a much lower p-value for vominus, although the p-value for intercept is a power of ten higher. Further proving there is a strong relation between voplus and vominus.
+
+
+
+## 11.40 Predicting bone resorption.
+
+To predict bone resperation, reverse the roles of VO+ and VO-
+
+### 1a)
+
+Refer to 11.39 for log numerical analysis
+
+### 1b)
+
+Refer to 11.39 for log pairs
+
+### 2a)
+
+\tiny
+```{r, echo=FALSE, out.width="50%"}
+relation <- lm(biomark$vominus ~ biomark$oc)
+short_summary(relation)
+reg <- lm(resid(relation) ~ biomark$oc)
+plot(logbiomark$loc, resid(relation), main="Residual plot of lVO- vs lOC")
+abline(reg)
+relA = relation
+```
+\normalsize
+
+
+### 2b)
+
+\tiny
+```{r, echo=FALSE}
+relation <- lm(biomark$vominus ~ biomark$oc+biomark$trap)
+short_summary(relation)
+relA = relation
+```
+\normalsize
+
+Fitted regression: $vominus = 309.051 + -1.868(oc) + 48.501(trap)$
+
+$OC$ Hypothesis Test:
+
+$H_0: \beta_1 = 0$ (no significant diff. from zero)
+
+$H_a: \beta_1 \neq 0$ (significant diff. from zero)
+
+As we can see the P-value for OC is much larger than significance level 0.05. Thus, we FAIL TO REJECT the null hypothesis. Meaning, that there is not a significant difference.
+
+$trap$ Hypothesis Test:
+
+$H_0: \beta_2 = 0$ (no significant diff. from zero)
+
+$H_a: \beta_2 \neq 0$ (significant diff. from zero)
+
+As we can see the P-value for TRAP is much less than significance level 0.05. Thus, we REJECT the null hypothesis. Meaning, that there is a significant difference. 
+
+
+The above results tell us that TRAP is measured with more precision than OC.
+
+This is consistent with the correlation found in exercise 11.36.
+
+
+### 3a)
+
+$vominus = \beta_0 + \beta_1 x_i + \beta_2 y_i + \beta_3 z_i + \epsilon_i, \, i= 1, \cdots n$
+
+$\epsilon_i \sim \mathcal{N}(0, \sigma^2)$
+
+s.t $(x,y,z) = (oc, trap, voplus)$
+
+
+### 3b)
+
+\tiny
+```{r, echo=FALSE}
+
+lm_final_rev = lm(vominus ~ oc + trap + voplus, data=df)
+
+summary(lm_final_rev)
+
+beta = round(coef(lm_final_rev), 3)
+
+```
+\normalsize
+
+$vominus = `r beta[1]` + `r beta[2]` (oc) + `r beta[3]` (trap) + `r beta[4]` (voplus)$
+
+### 3c)
+
+\tiny
+```{r, echo=FALSE}
+#for the person checking, this table has to be run
+#for the previous tests, then compare how the p-values
+# and coefficents differ.
+
+
+coefs_lm(lm_final_rev)
+coefs_lm(relA)
+coefs_lm(relB)
+```
+\normalsize
+
+Swapping the prediction values, gives a familiar result to the models made in 11.37-11.38, the lower p-values in the multiple regression model overall having a stronger model.
+
+The coefficients are similar results to that in 11.37-11.38
+
+### 3d)
+
+\tiny
+```{r, echo=FALSE}
+#same situation with part c
+r_sq(lm_final_rev, "vominus")
+r_sq(relA)
+r_sq(relB)
+```
+\normalsize
+
+The $R^2$ shows the multiple regression model is likely a good fit
+
+### 3e)
+
+The results from part b, show that there is a very low p-value for voplus, thus there is strong evidence that a model between voplus and vominus will result in an effective model.
+
+\tiny
+```{r, echo=FALSE}
+lm_final_new_rev = lm(vominus ~ voplus, data=df)
+summary(lm_final_new_rev)
+coefs_lm(lm_final_new_rev)
+r_sq(lm_final_new_rev, "vominus")
+```
+\normalsize
+
+In comparison with the multiple regression model, a model based on voplus and vominus has a much lower p-value for vominus, although the p-value for intercept is a power of ten higher. Further proving there is a strong relation between voplus and vominus.
+
+
+
+## 11.41 Predicting bone resorption using transformed variables.
+
+Repeat above exercise, but transform data via $log(Biomark)$
+
+### 1a)
+
+Refer to 11.39 for log numerical analysis
+
+### 1b)
+
+Refer to 11.39 for log pairs
+
+### 2a)
+
+\tiny
+```{r, echo=FALSE, out.width="50%"}
+relation <- lm(logbiomark$lvominus ~ logbiomark$loc)
+short_summary(relation)
+reg <- lm(resid(relation) ~ logbiomark$loc)
+plot(logbiomark$loc, resid(relation), main="Residual plot of lVO- vs lOC")
+abline(reg)
+relA = relation
+```
+\normalsize
+
+### 2b)
+
+\tiny
+```{r, echo=FALSE}
+relation <- lm(logbiomark$lvominus ~ logbiomark$loc+logbiomark$ltrap)
+short_summary(relation)
+relB = relation
+```
+\normalsize
+
+Fitted regression: $vominus = 5.03718 + 0.05675(loc) + 0.58969(ltrap)$
+
+$OC$ Hypothesis Test:
+
+$H_0: \beta_1 = 0$ (no significant diff. from zero)
+
+$H_a: \beta_1 \neq 0$ (significant diff. from zero)
+
+As we can see the P-value for LOC is larger than significance level 0.05. Thus, we FAIL TO REJECT the null hypothesis. Meaning, that there is not a significant difference. 
+
+$trap$ Hypothesis Test:
+
+$H_0: \beta_2 = 0$ (no significant diff. from zero)
+
+$H_a: \beta_2 \neq 0$ (significant diff. from zero)
+
+As we can see the P-value for LTRAP is less than significance level 0.05. Thus, we REJECT the null hypothesis. Meaning, that there is a significant difference. 
+
+The above results tell us that LTRAP is measured with more precision than LOC.
+
+This is consistent with the correlation found in exercise 11.36.
+
+### 3a)
+
+Given logarithm applied to dataset:
+
+$vominus = \beta_0 + \beta_1 x_i + \beta_2 y_i + \beta_3 z_i + \epsilon_i, \, i= 1, \cdots n$
+
+$\epsilon_i \sim \mathcal{N}(0, \sigma^2)$
+
+s.t $(x,y,z) = (oc, trap, voplus)$
+
+
+### 3b)
+
+\tiny
+```{r, echo=FALSE}
+
+lm_final_rev_log = lm(vominus ~ oc + trap + voplus, data=log(df))
+
+summary(lm_final_rev_log)
+
+beta = round(coef(lm_final_rev_log), 3)
+
+```
+\normalsize
+
+$vominus = `r beta[1]` + `r beta[2]` (oc) + `r beta[3]` (trap) + `r beta[4]` (voplus)$
+
+### 3c)
+
+\tiny
+```{r, echo=FALSE}
+#for the person checking, this table has to be run
+#for the previous tests, then compare how the p-values
+# and coefficents differ.
+
+coefs_lm(lm_final_rev_log)
+coefs_lm(relA)
+coefs_lm(relB)
+```
+\normalsize
+
+Similar to when we applied the log data, the first model overall has lower p-values compared to the rest.
+
+The coefficients in the multiple regression model are more normalized compared to the rest.
+
+### 3d)
+
+\tiny
+```{r, echo=FALSE}
+#same situation with part c
+r_sq(lm_final_rev_log, "vominus")
+r_sq(relA)
+r_sq(relB)
+```
+\normalsize
+
+The $R^2$ indicates the multiple regression model is a good fit between the rest of the models.
+
+### 3e)
+
+The results from part b, shows when applying logarithm to the data, that there still is a very low p-value for voplus, thus there is strong evidence that a model between voplus and vominus will result in an effective model.
+
+\tiny
+```{r, echo=FALSE}
+lm_final_new_rev_log = lm(vominus ~ voplus, data=log(df))
+summary(lm_final_new_rev_log)
+coefs_lm(lm_final_new_rev_log)
+r_sq(lm_final_new_rev_log, "vominus")
+```
+\normalsize
+
+In comparison with the multiple regression model, a model based on voplus and vominus has a much lower p-value for vominus, although the p-value for intercept is a power of ten higher. Further proving there is a strong relation between voplus and vominus.
